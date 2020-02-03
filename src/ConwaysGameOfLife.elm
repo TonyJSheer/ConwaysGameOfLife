@@ -11,7 +11,7 @@ import CellGrid as CG exposing (CellGrid)
 import CellGrid.Render as CGR exposing (asHtml, CellStyle)
 import Color
 
-import Element as EL exposing (Element, el, text, fill, width, padding)
+import Element as EL exposing (Element, el, text, fill, padding)
 import Element.Font as Font
 
 
@@ -163,16 +163,13 @@ subscriptions model =
     let
         time = model.pageObjects.timeFloat
         valid = model.pageObjects.timeInputValid
+        updateRequired = valid && model.pageObjects.started
     in
-    case valid of
-        True ->
-            case model.pageObjects.started of
-                True ->
-                    Time.every time UpdateGrid
-                False ->
-                    Sub.none
-        False ->
-            Sub.none
+        case updateRequired of
+            True ->
+                Time.every time UpdateGrid
+            False ->
+                Sub.none
 
 -- Update
 
