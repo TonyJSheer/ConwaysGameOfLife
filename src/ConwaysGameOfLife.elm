@@ -29,15 +29,15 @@ main =
 -- Helpers
 
 
-maybe_true : Generator Bool
-maybe_true = Random.map (\n -> n <= truth_percent) (Random.int 1 100)
+maybeTrue : Generator Bool
+maybeTrue = Random.map (\n -> n <= truthPercent) (Random.int 1 100)
 
-new_list : Generator (List Bool)
-new_list =
+newList : Generator (List Bool)
+newList =
     let
-        list_len = width * height
+        listLen = gridWidth * gridHeight
     in
-        Random.list list_len maybe_true
+        Random.list listLen maybeTrue
 
 
 -- MODEL
@@ -45,8 +45,8 @@ new_list =
 
 init : () -> (Model, Cmd Msg)
 init _ =
-  ( initModel
-  , Random.generate NewGrid new_list
+  ( initialModel
+  , Random.generate NewGrid newList
   )
 
 cellWidth: Int
@@ -61,13 +61,13 @@ type alias GridData =
     }
 gridData : GridData
 gridData =
-    { grid = CG.initialize my_dimensions (\ i j -> False)
-    , style = my_style
+    { grid = CG.initialize myDimensions (\ i j -> False)
+    , style = myStyle
     }
 
-my_style : CellStyle Bool
-my_style =
-    { toColor = \z -> Color.rgb (colour_from_bool z) 0 0
+myStyle : CellStyle Bool
+myStyle =
+    { toColor = \z -> Color.rgb (colourFromBool z) 0 0
     , cellWidth = toFloat cellWidth
     , cellHeight = toFloat cellHeight
     , gridLineColor = Color.rgb 180 0 0
@@ -76,7 +76,9 @@ my_style =
 
 type alias PageObjects =
     { started : Bool
-    , time_step : String
+    , timeInputText : String
+    , timeInputValid : Bool
+    , timeFloat : Float
     }
 
 
@@ -84,36 +86,37 @@ type alias Model =
     { gridData: GridData
     , pageObjects: PageObjects
     }
-initModel : Model
-initModel =
+initialModel : Model
+initialModel =
     { gridData = gridData
     , pageObjects =
         { started = False
-        , time_step = "250"
+        , timeInputText = "250"
+        , timeInputValid = True
+        , timeFloat = 250
         }
     }
 
 
-width : Int
-width = 40
+gridWidth : Int
+gridWidth = 40  -- gridWidth?
 
-height : Int
-height = width
+gridHeight : Int
+gridHeight = gridWidth
+
+truthPercent : Int
+truthPercent = 33
 
 
-truth_percent : Int
-truth_percent = 33
-
-
-colour_from_bool : Bool -> Float
-colour_from_bool truthyness =
+colourFromBool : Bool -> Float
+colourFromBool truthyness =
     if truthyness then 200 else 0
 
 
 display : {width : Int, height : Int}
-display = {width = cellWidth * width, height = cellHeight * height}
+display = {width = cellWidth * gridWidth, height = cellHeight * gridHeight}
 
-my_dimensions = CG.Dimensions width height
+myDimensions = CG.Dimensions gridWidth gridHeight
 
 
 -- VIEW
@@ -132,25 +135,25 @@ view model =
         , EL.row [EL.centerX] [gridView model |> EL.html]
         , EL.row [EL.centerX, padding 20]
             [ el [] ( text "Time in ms: ")
-            , Html.input [ placeholder "", value model.pageObjects.time_step, onInput UpdateTimeStep ] [] |> EL.html
+            , Html.input [ placeholder "", value model.pageObjects.timeInputText, onInput UpdateTimeStep ] [] |> EL.html
             , Html.button [ onClick RandomiseGrid ] [ Html.text "New Grid" ] |> EL.html
             , Html.button [ onClick Start ] [ Html.text "Start" ] |> EL.html
             , Html.button [ onClick Stop ] [ Html.text "Stop" ] |> EL.html
             ]
-        , EL.row [EL.centerX] [viewTimeStepValidation model |> EL.html]
+        , EL.row [EL.centerX] [viewTimeStepError model |> EL.html]
         ]
 
 
-
-viewTimeStepValidation model =
+-- type sig
+viewTimeStepError : Model -> Html msg
+viewTimeStepError model =
     let
-        input = model.pageObjects.time_step
-        timeStep = String.toInt input
+        valid = model.pageObjects.timeInputValid
     in
-        case timeStep of
-            Nothing ->
+        case valid of -- view can read off 'validity' from model
+            False ->
                 Html.div [ Html.Attributes.style "color" "red" ] [ Html.text "Invalid time entered" ]
-            Just x ->
+            True ->
                 Html.div [] []
 
 -- SUBSCRIPTIONS
@@ -158,17 +161,18 @@ viewTimeStepValidation model =
 subscriptions : Model -> Sub Msg
 subscriptions model =
     let
-        time = String.toFloat model.pageObjects.time_step
+        time = model.pageObjects.timeFloat
+        valid = model.pageObjects.timeInputValid
     in
-    case time of
-        Nothing ->
-            Sub.none
-        Just x ->
+    case valid of
+        True ->
             case model.pageObjects.started of
                 True ->
-                    Time.every x Step
+                    Time.every time UpdateGrid
                 False ->
                     Sub.none
+        False ->
+            Sub.none
 
 -- Update
 
@@ -178,27 +182,23 @@ type Msg = RandomiseGrid
          | UpdateTimeStep String
          | Start
          | Stop
-         | Step Time.Posix
+         | UpdateGrid Time.Posix
 
 type alias BoolGrid = CellGrid Bool
 
-life_rule : Int -> Int -> CellGrid Bool -> Bool
-life_rule x y grid =
+lifeRule : Int -> Int -> CellGrid Bool -> Bool
+lifeRule x y grid =
     let
         position = { row = x, column = y}
         neighbours = CG.neighbors position grid
-        true_values = List.filter (\a -> a) neighbours
-        truth_count = List.length true_values
-        cell : Maybe Bool
-        cell = (CG.get position grid)
-        cell2 = case cell of
-            Nothing -> False
-            Just contents -> contents
+        trueValues = List.filter (\a -> a) neighbours
+        truthCount = List.length trueValues
+        cell = (CG.get position grid) |> Maybe.withDefault False
     in
-        if truth_count == 3
+        if truthCount == 3
         then True
-        else if cell2
-        then truth_count == 2
+        else if cell
+        then truthCount == 2
         else False
 
 
@@ -213,13 +213,13 @@ update msg model =
 
         RandomiseGrid ->
             ( model
-            , Random.generate NewGrid new_list
+            , Random.generate NewGrid newList
             )
 
         NewGrid my_list ->
             let
                 new_grid : Maybe (CellGrid Bool)
-                new_grid = CG.fromList my_dimensions my_list
+                new_grid = CG.fromList myDimensions my_list
             in
                 case new_grid of
                     Nothing ->
@@ -229,12 +229,26 @@ update msg model =
                         , Cmd.none
                         )
         UpdateTimeStep input ->
-            ( { model | pageObjects = { pageObjects | time_step = input } } , Cmd.none)
+            let
+                maybeFloat = String.toFloat input
+            in
+                case maybeFloat of
+                    Just x ->
+                        ( { model | pageObjects =
+                            { pageObjects | timeInputText = input
+                                          , timeInputValid = True
+                                          , timeFloat = x
+                                          } } , Cmd.none)
+                    Nothing ->
+                        ( { model | pageObjects =
+                            { pageObjects | timeInputText = input
+                                          , timeInputValid = False
+                                          } } , Cmd.none)
 
-        Step posix ->
+        UpdateGrid _ ->
             let grid = model.gridData.grid
             in
-                ( { model | gridData = { gridData | grid = CG.transform life_rule grid} }
+                ( { model | gridData = { gridData | grid = CG.transform lifeRule grid} }
                 , Cmd.none
                 )
 
